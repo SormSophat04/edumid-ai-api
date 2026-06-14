@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: edumind-db
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: edumind_ai
+      POSTGRES_USER: edumind_ai_user
+      POSTGRES_PASSWORD: pg12345
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edumind_ai_user -d edumind_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: edumind-api
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      SERVER_PORT: 8085
+      DB_URL: jdbc:postgresql://db:5432/edumind_ai
+      DB_USERNAME: edumind_ai_user
+      DB_PASSWORD: pg12345
+      JPA_DDL_AUTO: update
+      JWT_SECRET: a7sd7fas8d7fsadtfa&aaasjdfasdSADFsdf3SDF423sdf3S2absdbfjkahsbdf
+      JWT_EXPIRATION_MS: 86400000
+      JWT_ISSUER: edumind-ai-api
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
