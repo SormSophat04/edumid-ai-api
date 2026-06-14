@@ -7,6 +7,7 @@ import java.util.Optional;
 
 public interface UserService {
     User register(RegisterRequest request);
+    Optional<User> findById(Long id);
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
 }

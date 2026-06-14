@@ -2,6 +2,7 @@ package com.ai.edumindaiapi.mapper;
 
 import com.ai.edumindaiapi.common.dto.AuthResponse;
 import com.ai.edumindaiapi.common.dto.RegisterRequest;
+import com.ai.edumindaiapi.common.dto.UserResponse;
 import com.ai.edumindaiapi.domain.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -18,4 +19,7 @@ public interface UserMapper {
 
     @Mapping(target = "token", source = "token")
     AuthResponse toAuthResponse(User user, String token);
+
+    @Mapping(target = "role", expression = "java(user.getRole().name())")
+    UserResponse toUserResponse(User user);
 }
