@@ -1,5 +1,6 @@
 package com.ai.edumindaiapi.jwt;
 
+import com.ai.edumindaiapi.security.AuthUser;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -44,8 +45,16 @@ public class JwtFilter extends OncePerRequestFilter {
                         .toList();
             }
 
+            Long userId = claims.get("userId", Long.class);
+
+            AuthUser authUser = AuthUser.builder()
+                    .id(userId)
+                    .username(username)
+                    .authorities(simpleGrantedAuthorities)
+                    .build();
+
             Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    username,
+                    authUser,
                     null,
                     simpleGrantedAuthorities
             );

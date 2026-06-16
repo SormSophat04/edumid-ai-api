@@ -39,7 +39,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         User user = userService.register(request);
 
-        String token = jwtService.generateToken(user.getEmail(), List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+        String token = jwtService.generateToken(user.getEmail(), user.getId(), List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
 
         AuthResponse authResponse = userMapper.toAuthResponse(user, token);
 
@@ -57,7 +57,7 @@ public class AuthController {
             User user = userService.findByEmail(authentication.getName())
                     .orElseThrow(() -> new BadRequestException("User not found"));
 
-            String token = jwtService.generateToken(user.getEmail(), List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+            String token = jwtService.generateToken(user.getEmail(), user.getId(), List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
 
             AuthResponse authResponse = userMapper.toAuthResponse(user, token);
 

@@ -25,7 +25,7 @@ public class JwtService {
     @Value("${security.jwt.issuer:clot-api}")
     private String issuer;
 
-    public String generateToken(String subject, Collection<? extends GrantedAuthority> authorities) {
+    public String generateToken(String subject, Long userId, Collection<? extends GrantedAuthority> authorities) {
         List<String> authorityNames = authorities.stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
@@ -39,6 +39,7 @@ public class JwtService {
                 .issuedAt(now)
                 .expiration(expiration)
                 .claim("authorities", authorityNames)
+                .claim("userId", userId)
                 .signWith(signingKey())
                 .compact();
     }

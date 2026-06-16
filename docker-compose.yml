@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_DB: edumind_ai
       POSTGRES_USER: edumind_ai_user
-      POSTGRES_PASSWORD: pg12345
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,13 +25,15 @@ services:
     restart: unless-stopped
     ports:
       - "8085:8085"
+    env_file:
+      - .env
     environment:
       SERVER_PORT: 8085
       DB_URL: jdbc:postgresql://db:5432/edumind_ai
       DB_USERNAME: edumind_ai_user
-      DB_PASSWORD: pg12345
+      DB_PASSWORD: ${DB_PASSWORD}
       JPA_DDL_AUTO: update
-      JWT_SECRET: a7sd7fas8d7fsadtfa&aaasjdfasdSADFsdf3SDF423sdf3S2absdbfjkahsbdf
+      JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION_MS: 86400000
       JWT_ISSUER: edumind-ai-api
     depends_on:
