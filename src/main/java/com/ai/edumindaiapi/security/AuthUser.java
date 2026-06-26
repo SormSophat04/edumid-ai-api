@@ -9,6 +9,7 @@ import java.util.Collection;
 
 @Getter
 public class AuthUser implements UserDetails {
+    private final Long id;
     private final Collection<? extends GrantedAuthority> authorities;
     private final String password;
     private final String username;
@@ -18,8 +19,9 @@ public class AuthUser implements UserDetails {
     private final boolean enabled;
 
     @Builder
-    public AuthUser(String username, String password, Collection<? extends GrantedAuthority> authorities,
+    public AuthUser(Long id, String username, String password, Collection<? extends GrantedAuthority> authorities,
                     Boolean accountNonExpired, Boolean accountNonLocked, Boolean credentialsNonExpired, Boolean enabled) {
+        this.id = id;
         this.username = username;
         this.password = password;
         this.authorities = authorities;

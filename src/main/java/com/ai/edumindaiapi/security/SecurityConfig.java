@@ -25,18 +25,15 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
-// import org.springframework.security.core.userdetails.UserDetailsService;
-// import org.springframework.security.crypto.password.PasswordEncoder;
-
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
-    // private final PasswordEncoder passwordEncoder;
-    // private final UserDetailsService userDetailsService;
     private final FilterChainExceptionHandler filterChainExceptionHandler;
     private final JwtService jwtService;
+
+    private final RateLimitingFilter rateLimitingFilter = new RateLimitingFilter();
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
@@ -52,12 +49,14 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(unauthorizedEntryPoint())
                 )
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(filterChainExceptionHandler, JwtFilter.class)
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/v3/api-docs/**",
+                                "/swagger-ui",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/api/auth/**"
@@ -75,7 +74,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:4200", "http://localhost:3000", "http://localhost:5173", "http://localhost:5174"));
+        String allowedOrigin = System.getenv("CORS_ALLOWED_ORIGIN") != null
+                ? System.getenv("CORS_ALLOWED_ORIGIN")
+                : "http://localhost:5173";
+        configuration.setAllowedOrigins(List.of(allowedOrigin));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

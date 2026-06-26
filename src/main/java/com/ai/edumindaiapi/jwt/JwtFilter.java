@@ -1,12 +1,12 @@
 package com.ai.edumindaiapi.jwt;
 
+import com.ai.edumindaiapi.security.AuthUser;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -44,15 +44,22 @@ public class JwtFilter extends OncePerRequestFilter {
                         .toList();
             }
 
+            Long userId = claims.get("userId", Long.class);
+
+            AuthUser authUser = AuthUser.builder()
+                    .id(userId)
+                    .username(username)
+                    .authorities(simpleGrantedAuthorities)
+                    .build();
+
             Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    username,
+                    authUser,
                     null,
                     simpleGrantedAuthorities
             );
             SecurityContextHolder.getContext().setAuthentication(authentication);
         } catch (Exception e) {
             SecurityContextHolder.clearContext();
-            throw new BadCredentialsException("JWT token is invalid or expired", e);
         }
 
         filterChain.doFilter(request, response);

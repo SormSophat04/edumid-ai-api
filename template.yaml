@@ -1,0 +1,265 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: EduMind AI API - ZIP deployment on AWS Lambda + RDS PostgreSQL (v2)
+
+Parameters:
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL master password (min 8 chars)
+  JWTSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT signing secret
+  JWTIssuer:
+    Type: String
+    Default: edumind-ai-api
+  DomainName:
+    Type: String
+    Default: edumind.api.sophathz.online
+    Description: Custom domain for the API
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub Personal Access Token (for GitHub Models AI)
+  CORSAllowedOrigin:
+    Type: String
+    Default: https://edumindai.sophathz.online
+    Description: Allowed CORS origin for the frontend
+
+Globals:
+  Function:
+    Runtime: java21
+    Handler: com.ai.edumindaiapi.StreamLambdaHandler::handleRequest
+    Timeout: 30
+    MemorySize: 2048
+    Tracing: Active
+    Environment:
+      Variables:
+        DB_USERNAME: edumind_ai_user
+        JWT_EXPIRATION_MS: '86400000'
+        JPA_DDL_AUTO: update
+
+Resources:
+  # ──────────────────────────────────────────────
+  # VPC (minimal — 2 private subnets only)
+  # ──────────────────────────────────────────────
+  EduMindVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-igw
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref EduMindVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref EduMindVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EduMindVPC
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-private-1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EduMindVPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-private-2
+
+  # ──────────────────────────────────────────────
+  # Security Groups
+  # ──────────────────────────────────────────────
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for EduMind Lambda
+      VpcId: !Ref EduMindVPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-lambda-sg
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL access from Lambda
+      VpcId: !Ref EduMindVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-rds-sg
+
+  RDSSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RDSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  RDSSecurityGroupPublicIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RDSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      CidrIp: 0.0.0.0/0
+
+  # ──────────────────────────────────────────────
+  # RDS PostgreSQL (free-tier eligible: db.t3.micro)
+  # ──────────────────────────────────────────────
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for EduMind RDS
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  EduMindDB:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      EngineVersion: '16.4'
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: edumind_ai
+      MasterUsername: edumind_ai_user
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      PubliclyAccessible: true
+      BackupRetentionPeriod: 0
+      CopyTagsToSnapshot: true
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-db
+
+  # ──────────────────────────────────────────────
+  # Lambda function — ZIP package, Java 21
+  # ──────────────────────────────────────────────
+  EduMindFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Zip
+      CodeUri: .
+      AutoPublishAlias: live
+      Environment:
+        Variables:
+          DB_URL: !Sub jdbc:postgresql://${EduMindDB.Endpoint.Address}:5432/edumind_ai
+          DB_PASSWORD: !Ref DBPassword
+          JWT_SECRET: !Ref JWTSecret
+          JWT_ISSUER: !Ref JWTIssuer
+          GITHUB_TOKEN: !Ref GitHubToken
+          CORS_ALLOWED_ORIGIN: !Ref CORSAllowedOrigin
+
+      Policies: []
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+  # ──────────────────────────────────────────────
+  # Custom Domain (ACM + API Gateway)
+  # ──────────────────────────────────────────────
+  ApiCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-cert
+
+  ApiDomainName:
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Ref DomainName
+      DomainNameConfigurations:
+        - EndpointType: REGIONAL
+          CertificateArn: !Ref ApiCertificate
+
+  ApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      ApiId: !Ref ServerlessHttpApi
+      DomainName: !Ref ApiDomainName
+      Stage: $default
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway HTTP API endpoint
+    Value: !Sub https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  CustomDomainEndpoint:
+    Description: Custom domain endpoint (add CNAME to your DNS)
+    Value: !GetAtt ApiDomainName.RegionalDomainName
+  CertArn:
+    Description: ACM certificate ARN (check validation status in ACM console)
+    Value: !Ref ApiCertificate
+  DBEndpoint:
+    Description: RDS PostgreSQL endpoint
+    Value: !GetAtt EduMindDB.Endpoint.Address
