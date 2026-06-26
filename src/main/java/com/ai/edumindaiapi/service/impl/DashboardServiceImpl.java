@@ -10,11 +10,13 @@ import com.ai.edumindaiapi.repository.EnrollmentRepository;
 import com.ai.edumindaiapi.repository.LessonProgressRepository;
 import com.ai.edumindaiapi.repository.QuizAttemptRepository;
 import com.ai.edumindaiapi.service.DashboardService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -29,10 +31,13 @@ public class DashboardServiceImpl implements DashboardService {
     private final LessonProgressRepository lessonProgressRepository;
     private final ActivityLogRepository activityLogRepository;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     @Override
     public DashboardStatsResponse getStudentStats(Long userId) {
         long coursesEnrolled = enrollmentRepository.countByUserId(userId);
-        long assignmentsPending = assignmentRepository.countByStatus(AssignmentStatus.PENDING);
+        long assignmentsPending = assignmentRepository.countByUserIdAndStatus(userId, AssignmentStatus.PENDING);
         long totalQuizAttempts = quizAttemptRepository.countByUserId(userId);
 
         double currentGpa = 0.0;
@@ -40,8 +45,7 @@ public class DashboardServiceImpl implements DashboardService {
             currentGpa = Math.min(4.0, totalQuizAttempts * 0.3 + 2.0);
         }
 
-        long completedLessons = lessonProgressRepository.countByUserIdAndCompletedTrue(userId);
-        long learningStreak = completedLessons > 0 ? Math.min(99, completedLessons / 2 + 1) : 0;
+        long learningStreak = calculateLearningStreak(userId);
 
         return DashboardStatsResponse.builder()
                 .coursesEnrolled((int) coursesEnrolled)
@@ -69,6 +73,47 @@ public class DashboardServiceImpl implements DashboardService {
         return RecentActivityResponse.builder()
                 .recentActivity(entries)
                 .build();
+    }
+
+    private long calculateLearningStreak(Long userId) {
+        List<java.sql.Date> dates = entityManager.createNativeQuery(
+        """
+            SELECT DISTINCT activity_date FROM (
+              SELECT DATE(created_at) AS activity_date FROM activity_logs WHERE user_id = :userId
+              UNION
+              SELECT DATE(completed_at) FROM lesson_progress WHERE user_id = :userId AND completed_at IS NOT NULL
+              UNION
+              SELECT DATE(created_at) FROM quiz_attempts WHERE user_id = :userId
+              UNION
+              SELECT DISTINCT DATE(cm.created_at) FROM chat_messages cm
+                JOIN chat_conversations cc ON cm.conversation_id = cc.id
+                WHERE cc.user_id = :userId
+            ) all_dates ORDER BY activity_date DESC
+            """)
+            .setParameter("userId", userId)
+            .getResultList();
+
+        if (dates.isEmpty()) return 0;
+
+        LocalDate today = LocalDate.now();
+        LocalDate latestDate = dates.get(0).toLocalDate();
+
+        if (ChronoUnit.DAYS.between(latestDate, today) > 1) return 0;
+
+        long streak = 0;
+        LocalDate expected = latestDate;
+
+        for (java.sql.Date date : dates) {
+            LocalDate activityDate = date.toLocalDate();
+            if (activityDate.equals(expected)) {
+                streak++;
+                expected = expected.minusDays(1);
+            } else if (activityDate.isBefore(expected)) {
+                break;
+            }
+        }
+
+        return streak;
     }
 
     private String formatTimeAgo(LocalDateTime dateTime) {

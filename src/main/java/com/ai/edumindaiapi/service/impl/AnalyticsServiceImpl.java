@@ -29,12 +29,34 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
     @Override
     public AnalyticsResponse getAnalytics(Long userId) {
+        return AnalyticsResponse.builder()
+                .performanceHistory(getPerformanceHistory(userId))
+                .subjectStrengths(getSubjectStrengths(userId))
+                .studyHours(getStudyHours(userId))
+                .aiPrediction(getGradePrediction(userId))
+                .build();
+    }
+
+    @Override
+    public List<AnalyticsResponse.PerformanceEntry> getPerformanceHistory(Long userId) {
         List<QuizAttempt> attempts = quizAttemptRepository.findByUserId(userId);
+        return buildPerformanceHistory(attempts);
+    }
 
-        List<AnalyticsResponse.PerformanceEntry> performanceHistory = buildPerformanceHistory(attempts);
-        List<AnalyticsResponse.SubjectStrength> subjectStrengths = buildSubjectStrengths(attempts);
-        List<AnalyticsResponse.StudyHourEntry> studyHours = buildStudyHours(userId);
+    @Override
+    public List<AnalyticsResponse.SubjectStrength> getSubjectStrengths(Long userId) {
+        List<QuizAttempt> attempts = quizAttemptRepository.findByUserId(userId);
+        return buildSubjectStrengths(attempts);
+    }
 
+    @Override
+    public List<AnalyticsResponse.StudyHourEntry> getStudyHours(Long userId) {
+        return buildStudyHours(userId);
+    }
+
+    @Override
+    public AnalyticsResponse.GradePrediction getGradePrediction(Long userId) {
+        List<QuizAttempt> attempts = quizAttemptRepository.findByUserId(userId);
         Map<String, Object> performanceData = new HashMap<>();
         performanceData.put("userId", userId);
         performanceData.put("totalAttempts", attempts.size());
@@ -46,15 +68,10 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         int confidence = prediction.containsKey("confidence") ? ((Number) prediction.get("confidence")).intValue() : 85;
         List<String> insights = prediction.containsKey("insights") ? (List<String>) prediction.get("insights") : List.of();
 
-        return AnalyticsResponse.builder()
-                .performanceHistory(performanceHistory)
-                .subjectStrengths(subjectStrengths)
-                .studyHours(studyHours)
-                .aiPrediction(AnalyticsResponse.GradePrediction.builder()
-                        .grade(grade)
-                        .confidence(confidence)
-                        .insights(insights)
-                        .build())
+        return AnalyticsResponse.GradePrediction.builder()
+                .grade(grade)
+                .confidence(confidence)
+                .insights(insights)
                 .build();
     }
 

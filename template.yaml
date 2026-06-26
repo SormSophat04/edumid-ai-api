@@ -22,6 +22,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: GitHub Personal Access Token (for GitHub Models AI)
+  CORSAllowedOrigin:
+    Type: String
+    Default: https://edumindai.sophathz.online
+    Description: Allowed CORS origin for the frontend
 
 Globals:
   Function:
@@ -204,6 +208,7 @@ Resources:
           JWT_SECRET: !Ref JWTSecret
           JWT_ISSUER: !Ref JWTIssuer
           GITHUB_TOKEN: !Ref GitHubToken
+          CORS_ALLOWED_ORIGIN: !Ref CORSAllowedOrigin
 
       Policies: []
       Events:

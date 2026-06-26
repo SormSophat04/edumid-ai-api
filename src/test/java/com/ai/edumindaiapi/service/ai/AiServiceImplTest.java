@@ -16,10 +16,7 @@ class AiServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        aiService = new AiServiceImpl(new ObjectMapper());
-        ReflectionTestUtils.setField(aiService, "apiKey", "");
-        ReflectionTestUtils.setField(aiService, "apiUrl", "https://api.openai.com/v1/chat/completions");
-        ReflectionTestUtils.setField(aiService, "model", "gpt-4");
+        aiService = new AiServiceImpl(new ObjectMapper(), "", "https://api.openai.com/v1/chat/completions", "gpt-4");
     }
 
     @Test

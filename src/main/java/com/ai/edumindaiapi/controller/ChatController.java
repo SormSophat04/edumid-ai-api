@@ -21,7 +21,7 @@ public class ChatController {
     private final ChatService chatService;
 
     @GetMapping("/conversations")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<ChatConversationResponse>>> getConversations() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long userId = ((AuthUser) authentication.getPrincipal()).getId();
@@ -29,7 +29,7 @@ public class ChatController {
     }
 
     @PostMapping("/conversations")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ChatConversationResponse>> createConversation(
             @Valid @RequestBody ChatConversationRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -38,13 +38,13 @@ public class ChatController {
     }
 
     @GetMapping("/conversations/{id}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<ChatMessageResponse>>> getMessages(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(chatService.getMessages(id)));
     }
 
     @PostMapping("/send")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<ApiResponse<ChatMessageResponse>> sendMessage(@Valid @RequestBody ChatSendRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long userId = ((AuthUser) authentication.getPrincipal()).getId();

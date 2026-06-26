@@ -1,6 +1,8 @@
 package com.ai.edumindaiapi.service.impl;
 
 import com.ai.edumindaiapi.common.dto.AssignmentResponse;
+import com.ai.edumindaiapi.common.dto.PageUtil;
+import com.ai.edumindaiapi.common.dto.PagedResponse;
 import com.ai.edumindaiapi.common.enums.AssignmentStatus;
 import com.ai.edumindaiapi.domain.Assignment;
 import com.ai.edumindaiapi.domain.Course;
@@ -11,6 +13,8 @@ import com.ai.edumindaiapi.service.AssignmentService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +36,13 @@ public class AssignmentServiceImpl implements AssignmentService {
         return assignments.stream()
                 .map(this::toResponseWithCourseName)
                 .toList();
+    }
+
+    @Override
+    public PagedResponse<AssignmentResponse> getAssignments(Long userId, Pageable pageable) {
+        Page<Assignment> page = assignmentRepository.findByUserId(userId, pageable);
+        Page<AssignmentResponse> mappedPage = page.map(this::toResponseWithCourseName);
+        return PageUtil.from(mappedPage);
     }
 
     @Override

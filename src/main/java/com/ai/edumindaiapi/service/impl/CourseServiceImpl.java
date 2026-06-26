@@ -1,7 +1,9 @@
 package com.ai.edumindaiapi.service.impl;
 
+import com.ai.edumindaiapi.common.dto.CreateCourseRequest;
 import com.ai.edumindaiapi.common.dto.CourseResponse;
 import com.ai.edumindaiapi.common.dto.CourseSummaryResponse;
+import com.ai.edumindaiapi.common.exception.BadRequestException;
 import com.ai.edumindaiapi.common.exception.ResourceNotFoundException;
 import com.ai.edumindaiapi.domain.Course;
 import com.ai.edumindaiapi.domain.Enrollment;
@@ -15,6 +17,7 @@ import com.ai.edumindaiapi.repository.LessonProgressRepository;
 import com.ai.edumindaiapi.repository.LessonRepository;
 import com.ai.edumindaiapi.repository.ModuleRepository;
 import com.ai.edumindaiapi.service.CourseService;
+import com.ai.edumindaiapi.service.EnrollmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +39,7 @@ public class CourseServiceImpl implements CourseService {
     private final LessonRepository lessonRepository;
     private final LessonProgressRepository lessonProgressRepository;
     private final CourseMapper courseMapper;
+    private final EnrollmentService enrollmentService;
 
     @Override
     public List<CourseSummaryResponse> getCourses(Long userId) {
@@ -68,10 +72,15 @@ public class CourseServiceImpl implements CourseService {
                 .map(LessonProgress::getLessonId)
                 .collect(Collectors.toSet());
 
-        List<CourseResponse.ModuleDto> moduleDtos = modules.stream().map(module -> {
-            List<Lesson> lessons = lessonRepository.findByModuleIdOrderByOrderIndex(module.getId());
+        List<Long> moduleIds = modules.stream().map(Module::getId).toList();
+        List<Lesson> allLessons = lessonRepository.findByModuleIdInOrderByOrderIndex(moduleIds);
+        Map<Long, List<Lesson>> lessonsByModule = allLessons.stream()
+                .collect(Collectors.groupingBy(Lesson::getModuleId));
 
-            List<CourseResponse.LessonDto> lessonDtos = lessons.stream().map(lesson -> {
+        List<CourseResponse.ModuleDto> moduleDtos = modules.stream().map(module -> {
+            List<Lesson> moduleLessons = lessonsByModule.getOrDefault(module.getId(), List.of());
+
+            List<CourseResponse.LessonDto> lessonDtos = moduleLessons.stream().map(lesson -> {
                 boolean completed = completedLessonIds.contains(lesson.getId());
                 return CourseResponse.LessonDto.builder()
                         .id(lesson.getId())
@@ -85,7 +94,7 @@ public class CourseServiceImpl implements CourseService {
                         .build();
             }).toList();
 
-            boolean moduleCompleted = lessonDtos.stream().allMatch(CourseResponse.LessonDto::isCompleted);
+            boolean moduleCompleted = !moduleLessons.isEmpty() && lessonDtos.stream().allMatch(CourseResponse.LessonDto::isCompleted);
             return CourseResponse.ModuleDto.builder()
                     .id(module.getId())
                     .title(module.getTitle())
@@ -99,6 +108,25 @@ public class CourseServiceImpl implements CourseService {
         response.setProgress(progress);
         response.setModules(moduleDtos);
         return response;
+    }
+
+    @Override
+    @Transactional
+    public CourseResponse createCourse(Long teacherId, CreateCourseRequest request) {
+        Course course = courseMapper.toEntity(request, teacherId);
+        course = courseRepository.save(course);
+        return courseMapper.toResponse(course);
+    }
+
+    @Override
+    @Transactional
+    public void enroll(Long courseId, Long userId) {
+        courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", "id", courseId));
+        if (enrollmentService.isEnrolled(userId, courseId)) {
+            throw new BadRequestException("Already enrolled in this course");
+        }
+        enrollmentService.enroll(userId, courseId);
     }
 
     @Override

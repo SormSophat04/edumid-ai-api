@@ -3,7 +3,9 @@ package com.ai.edumindaiapi.controller;
 import com.ai.edumindaiapi.common.dto.*;
 import com.ai.edumindaiapi.security.AuthUser;
 import com.ai.edumindaiapi.service.CourseService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -20,7 +22,7 @@ public class CourseController {
     private final CourseService courseService;
 
     @GetMapping
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<CourseSummaryResponse>>> getCourses() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long userId = ((AuthUser) authentication.getPrincipal()).getId();
@@ -28,11 +30,29 @@ public class CourseController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER', 'ADMIN')")
     public ResponseEntity<ApiResponse<CourseResponse>> getCourseDetail(@PathVariable Long id) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long userId = ((AuthUser) authentication.getPrincipal()).getId();
         return ResponseEntity.ok(ApiResponse.ok(courseService.getCourseDetail(id, userId)));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<ApiResponse<CourseResponse>> createCourse(@Valid @RequestBody CreateCourseRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long teacherId = ((AuthUser) authentication.getPrincipal()).getId();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(courseService.createCourse(teacherId, request)));
+    }
+
+    @PostMapping("/{id}/enroll")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<Void>> enroll(@PathVariable Long id) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long userId = ((AuthUser) authentication.getPrincipal()).getId();
+        courseService.enroll(id, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Enrolled successfully", null));
     }
 
     @PutMapping("/{id}/progress")

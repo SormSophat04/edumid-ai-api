@@ -2,31 +2,38 @@ package com.ai.edumindaiapi.service.ai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class AiServiceImpl implements AiService {
 
     private final ObjectMapper objectMapper;
+    private final String apiKey;
+    private final String apiUrl;
+    private final String model;
+    private final RestClient restClient;
 
-    @Value("${ai.api.key:}")
-    private String apiKey;
-
-    @Value("${ai.api.url:https://api.openai.com/v1/chat/completions}")
-    private String apiUrl;
-
-    @Value("${ai.api.model:gpt-4}")
-    private String model;
-
-    private final RestClient restClient = RestClient.builder().build();
+    public AiServiceImpl(ObjectMapper objectMapper,
+                         @Value("${ai.api.key:}") String apiKey,
+                         @Value("${ai.api.url:https://api.openai.com/v1/chat/completions}") String apiUrl,
+                         @Value("${ai.api.model:gpt-4}") String model) {
+        this.objectMapper = objectMapper;
+        this.apiKey = apiKey;
+        this.apiUrl = apiUrl;
+        this.model = model;
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(15000);
+        factory.setReadTimeout(30000);
+        this.restClient = RestClient.builder().requestFactory(factory).build();
+    }
 
     private boolean isRealMode() {
         return !apiKey.isEmpty();
@@ -43,7 +50,7 @@ public class AiServiceImpl implements AiService {
     @Override
     public String tutorReply(String context, List<Map<String, String>> conversationHistory, String userMessage) {
         if (isRealMode()) {
-            return callOpenAI(buildTutorPrompt(context, conversationHistory, userMessage));
+            return callOpenAIWithHistory(context, conversationHistory, userMessage);
         }
         return mockTutorReply(userMessage);
     }
@@ -103,12 +110,14 @@ public class AiServiceImpl implements AiService {
     }
 
     private String callOpenAI(String prompt) {
+        return callOpenAI(List.of(Map.of("role", "user", "content", prompt)));
+    }
+
+    private String callOpenAI(List<Map<String, String>> messages) {
         try {
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", model);
-            requestBody.put("messages", List.of(
-                Map.of("role", "user", "content", prompt)
-            ));
+            requestBody.put("messages", messages);
             requestBody.put("temperature", 0.7);
 
             Map response = restClient.post()
@@ -132,6 +141,22 @@ public class AiServiceImpl implements AiService {
         return "";
     }
 
+    private String callOpenAIWithHistory(String context, List<Map<String, String>> conversationHistory, String userMessage) {
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content",
+            "You are EduMind AI, a helpful programming tutor. Context: " + context));
+
+        if (conversationHistory != null) {
+            for (Map<String, String> entry : conversationHistory) {
+                String role = "user".equals(entry.get("sender")) ? "user" : "assistant";
+                messages.add(Map.of("role", role, "content", entry.get("text")));
+            }
+        }
+
+        messages.add(Map.of("role", "user", "content", userMessage));
+        return callOpenAI(messages);
+    }
+
     private String buildQuizPrompt(String topic, String difficulty, int count) {
         return String.format(
             "Generate a JSON quiz with %d multiple-choice questions about '%s' at '%s' difficulty. " +
@@ -139,14 +164,6 @@ public class AiServiceImpl implements AiService {
             "options (array of 4 strings), answer (int index 0-3), explanation (string). " +
             "No markdown, no code fences, just the JSON array.",
             count, topic, difficulty
-        );
-    }
-
-    private String buildTutorPrompt(String context, List<Map<String, String>> history, String message) {
-        return String.format(
-            "You are EduMind AI, a helpful programming tutor. Context: %s\n\nStudent: %s\n\n" +
-            "Provide a helpful, concise explanation with examples where appropriate.",
-            context, message
         );
     }
 
